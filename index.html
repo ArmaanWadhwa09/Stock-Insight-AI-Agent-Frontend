@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Insight AI Agent Client</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for aesthetic appeal and responsiveness */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f7f9fc;
+        }
+        .card {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 0 10px -5px rgba(0, 0, 0, 0.04);
+            transition: all 0.3s ease;
+        }
+        .loader {
+            border-top-color: #3b82f6;
+            -webkit-animation: spin 1s linear infinite;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        /* Mobile adjustment for smaller screens */
+        @media (max-width: 640px) {
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-start justify-center p-4 sm:p-10">
+
+    <div class="w-full max-w-lg container">
+        <!-- Header -->
+        <header class="text-center mb-10">
+            <h1 class="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">
+                Stock Insight AI Agent
+            </h1>
+            <p class="text-gray-500">
+                Generate a comprehensive stock report delivered to your inbox.
+            </p>
+        </header>
+
+        <!-- Input Card -->
+        <div id="input-card" class="card bg-white p-6 sm:p-8 rounded-xl border border-gray-200">
+            <h2 class="text-xl font-semibold mb-6 text-gray-700">Analysis Parameters</h2>
+            
+            <!-- Ticker Input -->
+            <div class="mb-5">
+                <label for="ticker" class="block text-sm font-medium text-gray-700 mb-1">Stock Ticker (e.g., AAPL, MSFT)</label>
+                <input type="text" id="ticker" placeholder="Enter Ticker Symbol" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 uppercase" maxlength="5" required>
+            </div>
+            
+            <!-- Email Input -->
+            <div class="mb-6">
+                <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email Address (To receive the report)</label>
+                <input type="email" id="email" placeholder="you@example.com" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500" required>
+            </div>
+            
+            <!-- Submit Button -->
+            <button id="submit-btn" class="w-full py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition duration-150 ease-in-out focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50">
+                Run AI Analysis
+            </button>
+        </div>
+
+        <!-- Status Message Box -->
+        <div id="status-message" class="mt-8 p-4 rounded-lg text-center font-medium transition-all duration-300 hidden" role="alert">
+            <!-- Messages will be injected here -->
+        </div>
+    </div>
+
+    <script>
+        // --- Configuration ---
+        // REPLACE THIS URL with your live n8n webhook test URL.
+        const WEBHOOK_URL = 'https://armaanwadhwa09.app.n8n.cloud/webhook-test/run_stock_insight';
+
+        // --- DOM Elements ---
+        const submitBtn = document.getElementById('submit-btn');
+        const tickerInput = document.getElementById('ticker');
+        const emailInput = document.getElementById('email');
+        const statusMessage = document.getElementById('status-message');
+
+        // --- Helper Functions ---
+
+        function showStatus(message, type = 'info') {
+            statusMessage.classList.remove('hidden', 'bg-green-100', 'text-green-800', 'bg-yellow-100', 'text-yellow-800', 'bg-red-100', 'text-red-800');
+            statusMessage.innerHTML = message;
+
+            if (type === 'success') {
+                statusMessage.classList.add('bg-green-100', 'text-green-800');
+            } else if (type === 'error') {
+                statusMessage.classList.add('bg-red-100', 'text-red-800');
+            } else { // info/loading
+                statusMessage.classList.add('bg-blue-100', 'text-blue-800');
+            }
+        }
+
+        function setFormState(enabled) {
+            submitBtn.disabled = !enabled;
+            tickerInput.disabled = !enabled;
+            emailInput.disabled = !enabled;
+            submitBtn.innerHTML = enabled ? 'Run AI Analysis' : 
+                '<span class="loader border-b-2 border-white rounded-full h-5 w-5 inline-block mr-2"></span> Analysis Running...';
+        }
+
+        // --- Main Logic ---
+
+        submitBtn.addEventListener('click', async () => {
+            const ticker = tickerInput.value.trim().toUpperCase();
+            const email = emailInput.value.trim();
+
+            if (!ticker || !email) {
+                showStatus('Please enter both a stock ticker and a valid email address.', 'error');
+                return;
+            }
+
+            if (!email.includes('@') || !email.includes('.')) {
+                showStatus('Please enter a valid email address.', 'error');
+                return;
+            }
+
+            setFormState(false);
+            showStatus(`Processing request for ${ticker}. The report will be emailed to you shortly.`, 'info');
+
+            const payload = {
+                ticker: ticker,
+                email: email
+            };
+
+            try {
+                const response = await fetch(WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+
+                if (response.status === 200 || response.status === 202) {
+                    // 200/202 status means the webhook accepted the request successfully
+                    // and your n8n workflow started running asynchronously.
+                    showStatus(
+                        `✅ Success! Analysis started for ${result.ticker || ticker}. You will receive the full report at ${email} in 1-2 minutes.`, 
+                        'success'
+                    );
+                } else {
+                    // Handle other HTTP errors or n8n errors
+                    showStatus(`⚠️ Error accepting request (Code: ${response.status}). Please check the console for details or try again later.`, 'error');
+                    console.error("Webhook Error Response:", result);
+                }
+
+            } catch (error) {
+                showStatus(`❌ Network Error: Could not reach the automation service. Please check your console.`, 'error');
+                console.error("Fetch Error:", error);
+            } finally {
+                setFormState(true);
+            }
+        });
+    </script>
+
+</body>
+</html>
